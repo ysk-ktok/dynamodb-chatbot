@@ -3,43 +3,43 @@ import boto3
 import uuid
 from datetime import datetime
 import time
-import os
 from boto3.dynamodb.conditions import Key
-from os.path import join, dirname
-from dotenv import load_dotenv
 
-# .envファイルから環境変数を読み込む
-load_dotenv(verbose=True)
-
-# AWSセッションとDynamoDBリソースの初期化
+# AWS認証情報の初期化
 def initialize_aws():
-    # AWSの認証情報とリージョンを取得
-    aws_access_key_id = os.environ.get("AWS_ACCESS_KEY")
-    aws_secret_access_key = os.environ.get("AWS_SECRET_KEY")
-    region_name = os.environ.get("AWS_REGION")
-    dynamodb_endpoint = os.environ.get("DYNAMODB_ENDPOINT")
-    
-    # セッションの作成
-    session = boto3.Session(
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        region_name=region_name
-    )
-    
-    # DynamoDBリソースの作成
-    # ローカルエンドポイントが設定されている場合はそれを使用
-    if dynamodb_endpoint and dynamodb_endpoint.strip():
-        dynamodb = session.resource('dynamodb', endpoint_url=dynamodb_endpoint)
-    else:
+    try:
+        # Streamlit Cloudのシークレットから認証情報を取得
+        aws_access_key_id = st.secrets["aws"]["aws_access_key_id"]
+        aws_secret_access_key = st.secrets["aws"]["aws_secret_access_key"]
+        region_name = st.secrets["aws"]["region_name"]
+        table_name = st.secrets["aws"]["table_name"]
+        
+        # セッションの作成
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            region_name=region_name
+        )
+        
+        # DynamoDBリソースの作成（AWSのDynamoDBに接続）
         dynamodb = session.resource('dynamodb')
-    
-    return dynamodb
+        
+        return dynamodb, table_name
+    except Exception as e:
+        st.error(f"AWS認証情報の取得に失敗しました: {e}")
+        return None, None
 
 # DynamoDBテーブルの作成（存在しない場合）
-def create_table_if_not_exists(dynamodb):
+def create_table_if_not_exists(dynamodb, table_name):
     try:
+        # テーブルが存在するか確認
+        existing_tables = [table.name for table in dynamodb.tables.all()]
+        if table_name in existing_tables:
+            return dynamodb.Table(table_name)
+        
+        # テーブルが存在しない場合は作成
         table = dynamodb.create_table(
-            TableName=os.environ.get("TABLE_NAME"),
+            TableName=table_name,
             KeySchema=[
                 {'AttributeName': 'conversation_id', 'KeyType': 'HASH'},  # パーティションキー
                 {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}  # ソートキー
@@ -51,13 +51,13 @@ def create_table_if_not_exists(dynamodb):
             ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
         )
         # テーブルが作成されるまで待機
-        table.meta.client.get_waiter('table_exists').wait(TableName=os.environ.get("TABLE_NAME"))
+        table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
         st.success("DynamoDBテーブルが作成されました！")
         return table
     except Exception as e:
         # テーブルが既に存在する場合など
         print(f"テーブル作成中のエラー（既に存在する場合は無視してください）: {e}")
-        return dynamodb.Table(os.environ.get("TABLE_NAME"))
+        return dynamodb.Table(table_name)
 
 # メッセージをDynamoDBに保存
 def save_message(table, conversation_id, sender, message):
@@ -134,8 +134,12 @@ def main():
     
     # AWSとDynamoDBの初期化
     try:
-        dynamodb = initialize_aws()
-        table = create_table_if_not_exists(dynamodb)
+        dynamodb, table_name = initialize_aws()
+        if not dynamodb or not table_name:
+            st.error("AWS認証情報が正しく設定されていません。Streamlit Cloudの設定を確認してください。")
+            return
+            
+        table = create_table_if_not_exists(dynamodb, table_name)
     except Exception as e:
         st.error(f"DynamoDBへの接続中にエラーが発生しました: {e}")
         return
@@ -158,7 +162,7 @@ def main():
                     )
                     if st.button("この会話を開く"):
                         st.session_state.conversation_id = selected_conversation
-                        st.experimental_rerun()
+                        st.rerun()
                 else:
                     st.info("会話がまだありません")
             except Exception as e:
@@ -218,7 +222,7 @@ def main():
                 st.success("メッセージを削除しました")
                 # 状態をリセットしてページを更新
                 st.session_state.delete_message = None
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"メッセージの削除中にエラーが発生しました: {e}")
         
@@ -230,7 +234,7 @@ def main():
                 st.success("メッセージを完全に削除しました")
                 # 状態をリセットしてページを更新
                 st.session_state.permanent_delete = None
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"メッセージの完全削除中にエラーが発生しました: {e}")
         
@@ -260,7 +264,7 @@ def main():
                         # 完全削除ボタン
                         if st.button("完全に削除", key=f"permanent_{timestamp}"):
                             st.session_state.permanent_delete = timestamp
-                            st.experimental_rerun()
+                            st.rerun()
                     continue
                 elif is_deleted and not show_deleted:
                     # 削除済みで表示しない設定の場合はスキップ
@@ -298,14 +302,14 @@ def main():
                     if is_own_message or user_type == "サポート担当者":
                         if st.button("削除", key=f"delete_{timestamp}"):
                             st.session_state.delete_message = timestamp
-                            st.experimental_rerun()
+                            st.rerun()
     except Exception as e:
         st.error(f"会話履歴の取得中にエラーが発生しました: {e}")
     
     # 新しい会話を開始するオプション
     if st.button("新しい会話を開始"):
         st.session_state.conversation_id = str(uuid.uuid4())
-        st.experimental_rerun()
+        st.rerun()
     
     # 自動応答ボットの有効/無効を切り替えるオプション（サポート担当者のみ）
     if user_type == "サポート担当者":
