@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: streamlit-chatbot
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    depends_on:
+      - dynamodb-local
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+networks:
+  chatbot-network:
+    driver: bridge
+volumes:
+  dynamodb-data:
+    driver: local

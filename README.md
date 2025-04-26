@@ -1,2 +1,5 @@
-# dynamodb-chatbot
-Streamlit × DynamoDBで作成したチャットボットです。
+Docker-Composeコマンドで起動
+
+```bash
+docker-compose up --build
+```
