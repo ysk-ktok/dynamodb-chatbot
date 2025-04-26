@@ -10,7 +10,7 @@ def initialize_aws():
     try:
         # Streamlit Cloudのシークレットから認証情報を取得
         aws_access_key_id = st.secrets["aws"]["AWS_ACCESS_KEY"]
-        aws_secret_access_key = st.secrets["aws"]["AWS_ACCESS_KEY"]
+        aws_secret_access_key = st.secrets["aws"]["AWS_SECRET_KEY"]
         region_name = st.secrets["aws"]["AWS_REGION"]
         table_name = st.secrets["aws"]["TABLE_NAME"]
         
