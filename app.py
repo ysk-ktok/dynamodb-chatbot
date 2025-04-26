@@ -9,10 +9,10 @@ from boto3.dynamodb.conditions import Key
 def initialize_aws():
     try:
         # Streamlit Cloudのシークレットから認証情報を取得
-        aws_access_key_id = st.secrets["aws"]["aws_access_key_id"]
-        aws_secret_access_key = st.secrets["aws"]["aws_secret_access_key"]
-        region_name = st.secrets["aws"]["region_name"]
-        table_name = st.secrets["aws"]["table_name"]
+        aws_access_key_id = st.secrets["aws"]["AWS_ACCESS_KEY"]
+        aws_secret_access_key = st.secrets["aws"]["AWS_ACCESS_KEY"]
+        region_name = st.secrets["aws"]["AWS_REGION"]
+        table_name = st.secrets["aws"]["TABLE_NAME"]
         
         # セッションの作成
         session = boto3.Session(
